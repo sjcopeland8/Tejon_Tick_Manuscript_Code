@@ -1,0 +1,413 @@
+---
+title: "Data Cleaning"
+author: "Stephanie Copeland & Samantha Sambado"
+date: "2021-10-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(plyr)
+library(here)
+library(Rcapture)
+```
+
+## Dataset 1 -- Tick Density
+
+Final version of exported datafile = "Tejon_MeanComparisons_Dataset.xlsx"
+
+###n Step 1. Merge Data \###
+
+```{r}
+threeyrs <- read_csv("Total_Ticks_2016_to_2018.csv")
+oneyr <- read_csv("Tick_19.csv")
+```
+
+```{r}
+# get rid of survery column in threeyr since it wasn't completed in oneyrs 
+threeyrs <- threeyrs %>% 
+  select(-Survey)
+```
+
+```{r}
+# make sure names are the same
+## 2016 - 2018
+names(threeyrs) <- tolower(names(threeyrs))
+
+# change column names
+names(threeyrs)[6] <- "total"
+names(threeyrs)[7] <- "deoc"
+names(threeyrs)[8] <- "ipac"
+names(threeyrs)[9] <- "deva"
+names(threeyrs)[10] <- "other"
+```
+
+```{r}
+## 2019
+# make sure names are the same
+names(oneyr) <- tolower(names(oneyr))
+
+# change column names
+names(oneyr)[6] <- "total"
+names(oneyr)[7] <- "deoc"
+names(oneyr)[8] <- "ipac"
+names(oneyr)[9] <- "deva"
+names(oneyr)[10] <- "other"
+```
+
+```{r}
+tick <- rbind(threeyrs, oneyr)
+```
+
+```{r}
+## add plotID
+
+tick <- transform(tick, plotID = as.numeric(interaction(site, plot,block, drop = TRUE)))
+```
+
+### Step 2. Check Data Structures
+
+```{r}
+str(tick) 
+
+tick$year <- as.numeric(tick$year)
+tick$site <- as.factor(tick$site)
+tick$plot <- as.factor(tick$plot)
+
+## Changed to Tick from tick due to it being called that way in some analyses
+
+Tick <- tick
+
+#install.packages("writexl")
+library(writexl)
+
+#write_xlsx(Tick, path = "Tejon_MeanComparisons_Dataset.xlsx",
+          #col_names = TRUE, format_headers = FALSE)
+```
+
+## Dataset 2 -- Mammal & Lizard Data
+
+Final version of exported file = "Tejon_MixedModels_Dataset.xlsx"
+
+### Population Estimates for Mammals
+
+```{r}
+mamcounts <- read_csv("mammal_counts_02182021.csv")
+```
+
+```{r}
+mamcounts$day1 <- as.numeric(mamcounts$day1)
+mamcounts$day2 <- as.numeric(mamcounts$day2)
+mamcounts$day3 <- as.numeric(mamcounts$day3)
+mamcounts$site <- as.factor(mamcounts$site)
+mamcounts$plot <- as.factor(mamcounts$plot)
+mamcounts$block <- as.numeric(mamcounts$block)
+```
+
+#### Arid
+
+```{r}
+library(Rcapture)
+
+AridO <- mamcounts %>%
+  filter(site == "Arid", plot =="Open", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundance0 = closedp.t(AridO, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundance0$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] #select total abundance
+
+## Open (Wildlife and Cattle)
+#Block 1 = 2
+#Block 2 = 5
+#Block 3 = 15
+
+AridP <- mamcounts %>%
+  filter(site == "Arid", plot =="Partial", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundance0 = closedp.t(AridP, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundance0$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] #select total abundance
+
+## Partial (Wildlife)
+# Block 1 = 16
+# Block 2 = 46, lowest BIC was negative so chose next lowest model M0
+# Block 3 = Estimates were in the 500000000 so we chose to omit this block 
+
+AridT <- mamcounts %>%
+  filter(site == "Arid", plot =="Total", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundance0 = closedp.t(AridT, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundance0$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] #select total abundance
+
+## Total (-Cattle & Wildlife)
+# Block 1 = 16
+# Block 2 = 41
+# Block 3 = 16
+
+```
+
+#### Intermediate
+
+```{r}
+IntermediateO <- mamcounts %>%
+  filter(site == "Intermediate", plot =="Open", block == 2) %>%
+  select(day1, day2, day3)
+  
+abundanceO = closedp.t(IntermediateO, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundanceO$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] # select total abundance 
+
+## Open (Wildlife and Cattle)
+# Block 1 = no mammals trapped at block 1, Intermediate, C&W
+# Block 2 = 6
+# Block 3 = estimates were in the 7e09 so we chose to omit this block 
+
+IntermediateP <- mamcounts %>%
+  filter(site == "Intermediate", plot =="Partial", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundanceO = closedp.t(IntermediateP, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundanceO$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] # select total abundance 
+
+## Partial (Wildlife)
+# Block 1 = 8
+# Block 2 = 2
+# Block 3 = estimates were in 700 so omitted this data
+
+IntermediateT <- mamcounts %>%
+  filter(site == "Intermediate", plot =="Total", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundanceO = closedp.t(IntermediateT, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundanceO$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] # select total abundance 
+
+## Total (-Wildlife and Cattle)
+# Block 1 = 32
+# Block 2 = estimates over 5 mil so omitted
+# Block 3 = 2
+```
+
+#### Mesic
+
+```{r}
+MesicO <- mamcounts %>%
+  filter(site == "Mesic", plot =="Open", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundanceO = closedp.t(MesicO, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundanceO$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] # select total abundance
+
+## Open (Wildlife and Cattle)
+# Block 1 = 29
+# Block 2 = 2
+# Block 3 = 13
+
+MesicP <- mamcounts %>%
+  filter(site == "Mesic", plot =="Partial", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundanceO = closedp.t(MesicP, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundanceO$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] # select total abundance
+
+## Partial (Wildlife)
+# Block 1 = 216
+# Block 2 = 16
+# Block 3 = estimates were 10mil so omitted them
+
+MesicT <- mamcounts %>%
+  filter(site == "Mesic", plot =="Total", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundanceO = closedp.t(MesicT, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundanceO$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] # select total abundance
+
+## Total (-Wildlife and Cattle)
+# Block 1 = 63
+# Block 2 = 8
+# Block 3 = 18
+
+```
+
+### Population Estimates for Lizards
+
+```{r}
+lizcounts <- read_csv("lizardcounts_02172021.csv")
+```
+
+```{r}
+names(lizcounts) <- tolower(names(lizcounts))
+
+lizcounts$day1 <- as.numeric(lizcounts$day1)
+lizcounts$day2 <- as.numeric(lizcounts$day2)
+lizcounts$day3 <- as.numeric(lizcounts$day3)
+lizcounts$site <- as.factor(lizcounts$site)
+lizcounts$plot <- as.factor(lizcounts$plot)
+lizcounts$block <- as.numeric(lizcounts$block)
+```
+
+```{r}
+AridO <- lizcounts %>%
+  filter(site == "Arid", plot =="Open", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundance0 = closedp.t(AridO, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundance0$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] # select total abundance 
+
+## Open (Wildlife and Cattle)
+# Block 1 = 52
+# Block 2 = 61
+# Block 3 = 83
+
+AridP <- lizcounts %>%
+  filter(site == "Arid", plot =="Partial", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundance0 = closedp.t(AridP, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundance0$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] # select total abundance 
+
+## Partial (Wildlife)
+# Block 1 = 74
+# Block 2 = 73
+# Block 3 = 70
+
+AridT <- lizcounts %>%
+  filter(site == "Arid", plot =="Total", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundance0 = closedp.t(AridT, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundance0$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] # select total abundance 
+
+## Total (-Wildlife and Cattle)
+# Block 1 = 68
+# Block 2 = 61
+# Block 3 = 89
+
+```
+
+#### Intermediate
+
+```{r}
+IntermediateO <- lizcounts %>%
+  filter(site == "Intermediate", plot =="Open", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundanceO = closedp.t(IntermediateO, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundanceO$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] # select total abundance 
+
+## Open (Wildlife and Cattle)
+# Block 1 = 130
+# Block 2 = 85
+# Block 3 = 208
+
+IntermediateP <- lizcounts %>%
+  filter(site == "Intermediate", plot =="Partial", block == 2) %>%
+  select(day1, day2, day3)
+  
+abundanceO = closedp.t(IntermediateP, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundanceO$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] # select total abundance
+
+## Partial (Wildlife)
+# Block 1 = 134
+# Block 2 = 48
+# Block 3 = 163
+
+IntermediateT <- lizcounts %>%
+  filter(site == "Intermediate", plot =="Total", block == 1) %>%
+  select(day1, day2, day3)
+  
+abundanceO = closedp.t(IntermediateT, dfreq = FALSE, dtype="hist") 
+models <- as.data.frame(abundanceO$results)
+models <- models[order(models$BIC), ]
+
+models[1,1] # select total abundance
+
+## Total (-Wildlife and Cattle)
+# Block 1 = 138, lowest BIC was negative so chose next lowest model Mb
+# Block 2 = 85
+# Block 3 = 177
+```
+
+Did not sample lizards at the Mesic climate location.
+
+**All of these result values were entered into an Excel spreadsheet titled:** `tejon_mamliz_popestimates.xlsx`
+
+## Add lizard and mammal estimates with tick counts.
+
+```{r}
+# log transform tick count data
+Tick$log_total <- log(Tick$total + 1)
+
+# vertebrate population estimates
+pop_estimates <-read_csv("tejon_mamliz_popestimates.csv")
+
+# add pop estimates to tick data
+vert.tick <- join(Tick, pop_estimates)
+```
+
+### Tidy Data
+
+```{r}
+vert.tick$year <- as.factor(vert.tick$year)
+vert.tick$block <- as.factor(vert.tick$block)
+vert.tick$plotID <- as.factor(vert.tick$plotID)
+
+vert.tick$month <- factor(vert.tick$month, 
+                        levels = c('January', 'February', 'March',
+                                   'April', 'May', 'June', 'July',
+                                   'August', 'September', 'October',
+                                   'November', 'December'))
+vert.tick$site <- factor(vert.tick$site, 
+                    levels = c('Arid', 'Intermediate', 'Mesic'))
+
+vert.tick$plot <- factor(vert.tick$plot, 
+                    levels = c('Open', 'Partial', 'Total'))
+
+#write_xlsx(vert.tick, path = "Tejon_MixedModels_Dataset.xlsx",
+           #col_names = TRUE, format_headers = FALSE)
+```

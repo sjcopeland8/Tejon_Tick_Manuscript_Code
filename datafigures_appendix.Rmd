@@ -1,0 +1,357 @@
+---
+title: "Data Figures Script for the Appendix"
+author: "Stephanie Copeland & Samantha Sambado"
+date: "2024-08-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## upload neccessary packages
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(plyr)
+library(knitr)
+library(lme4)
+library(jtools)
+library(MuMIn)
+library(rstatix)
+#install.packages("glmmTMB", type="source")
+library(glmmTMB)
+library(pscl)
+#install.packages("ggsignif")
+library(ggsignif)
+#install.packages("ggpubr")
+library(ggpubr)
+library(patchwork)
+
+```
+
+```{r}
+## upload data
+tick <- read_csv("Tejon_MeanComparisons_Dataset.csv")
+dim(tick) # 1449   11
+
+#plot = herbivore exclosure treatment
+# Partial = wildlife only (W)
+# Open = wildlife & cattle (CW)
+# Total = minus wildlife & cattle (-CW)
+
+#site = climate level 
+# Arid
+# Intermediate 
+# Mesic
+
+## working dataframe
+Tick <- tick
+
+### format data
+Tick$deoc <- as.integer(Tick$deoc)
+Tick$site <- as.factor(Tick$site)
+Tick$plot <- as.factor(Tick$plot)
+Tick$year <- as.factor(Tick$year)
+Tick$month <- as.factor(Tick$month)
+
+## change any plots in 2016 to 'Open', fencing was established in November of 2016
+Tick <- Tick %>%
+  mutate(plot = if_else(year == "2016", "Open", plot))
+
+# remove pre-treatment 2016 data for some of the stats
+# summary analyses includes all tick species collected in drags
+# effect and regression analyses include only D. occidentalis counts from 2017 onward
+Tick1 <- Tick %>%
+  filter(year != "2016")
+dim(Tick1)
+
+Tick1$deoc <- as.integer(Tick1$deoc)
+Tick1$site <- as.factor(Tick1$site)
+Tick1$plot <- as.factor(Tick1$plot)
+Tick1$year <- as.factor(Tick1$year)
+Tick1$month <- as.factor(Tick1$month)
+```
+
+## Appendix Figures ##
+
+### Figure S1(a & b) ###
+
+Mean observed vs. Mean predicted for climate and herbivory model fit
+
+**Fig S1a**
+```{r}
+Tickmod <- na.omit(Tick1)
+
+#best fit model
+mod_2_4 <- glmmTMB(deoc ~ plot*site*year + (1|month) + (1|plotID),
+                  family = nbinom2(), 
+                  data = Tick1)
+
+#make predictions
+Tickmod$predicted <- predict(mod_2_4, type = "response")
+
+# Get predictions and standard errors
+predictions <- predict(mod_2_4, type = "response", se.fit = TRUE)
+Tickmod$predicted <- predictions$fit
+Tickmod$se <- predictions$se.fit
+
+### format data
+Tickmod$deoc <- as.integer(Tickmod$deoc)
+Tickmod$site <- as.factor(Tickmod$site)
+Tickmod$plot <- as.factor(Tickmod$plot)
+Tickmod$year <- as.factor(Tickmod$year)
+Tickmod$month <- as.factor(Tickmod$month)
+
+#aggregate data
+modagg_data <- Tickmod %>%
+  dplyr::group_by(plot, site, year) %>%
+  dplyr::summarize(mean_observed = mean(deoc, na.rm = TRUE),
+            mean_predicted = mean(predicted, na.rm = TRUE),
+            .groups = 'drop')
+
+FigS1a <- ggplot(modagg_data, aes(x = mean_observed, y = mean_predicted, color = plot)) +
+  geom_point(size = 3) +
+  geom_smooth(method = "lm", formula = y ~ x, se = TRUE, color = "grey", size = 0.5) +
+  labs(x = "Mean Observed Values",
+       y = "Mean Predicted Values") +
+    scale_color_manual(values = c("Open" = "darkseagreen1", 
+                                "Partial" = "darkseagreen3", 
+                                "Total" = "darkseagreen4"),
+                        labels = c("Open" = "CW", 
+                                  "Partial" = "W", 
+                                  "Total" = "-CW"),
+                       breaks = c("Open", "Partial", "Total")) +
+      annotate("text", x = -Inf, y = Inf, label = "a.", hjust = -0.8, vjust = 2.0, size = 4, family = "Times New Roman") +
+  guides(color = guide_legend(title = "Herbivore Treatment")) + 
+  theme_bw()+
+  theme(
+    legend.position =  'bottom',
+    text = element_text(family = "Times New Roman"), 
+    axis.text.x = element_text(size = 10),          
+    axis.text.y = element_text(size = 10),           
+    axis.title.x = element_text(size = 12),          
+    axis.title.y = element_text(size = 12),          
+    plot.title = element_blank()                     
+  )
+FigS1a
+```
+
+**Fig S1b**
+```{r}
+FigS1b <- ggplot(modagg_data, aes(x = mean_observed, y = mean_predicted, color = site)) +
+  geom_point(size = 3) +
+  geom_smooth(method = "lm", formula = y ~ x, se = TRUE, color = "grey", size = 0.5) +
+  labs(x = NULL,
+       y = NULL) +
+    scale_color_manual(values = c("Arid" = "brown1", 
+                                "Intermediate" = "tan1", 
+                                "Mesic" = "lightgoldenrod1"),
+                       breaks = c("Arid", "Intermediate", "Mesic")) +
+    annotate("text", x = -Inf, y = Inf, label = "b.", hjust = -0.8, vjust = 2.0, size = 4, family = "Times New Roman") +
+  guides(color = guide_legend(title = "Climate Level")) + 
+  theme_bw()+
+  theme(
+    legend.position =  'bottom',
+    text = element_text(family = "Times New Roman"), 
+    axis.text.x = element_text(size = 10),           
+    axis.text.y = element_text(size = 10),          
+    axis.title.x = element_text(size = 12),          
+    axis.title.y = element_text(size = 12),         
+    plot.title = element_blank()                     
+  )
+FigS1b
+```
+
+combine plots
+```{r}
+# Combine the two plots side by side
+combined_plot <- FigS1a + FigS1b + plot_layout(ncol = 2)
+
+# Display the combined plot
+combined_plot
+
+#ggsave("FigS1a_b.png", combined_plot, width = 7, dpi = 600)
+```
+
+### Figure S2 ###
+
+Monthly log of tick abundance 
+
+```{r}
+Tickmonth <- Tick1
+
+Tickmonth$month <- factor(Tickmonth$month, 
+                        levels = c('January', 'February', 'March',
+                                   'April', 'May', 'June', 'July',
+                                   'August', 'September', 'October',
+                                   'November', 'December'))
+
+Tickmonth$site <- factor(Tickmonth$site, 
+                    levels = c('Arid', 'Intermediate', 'Mesic'))
+
+
+Tickmonth$plot <- recode(Tickmonth$plot,
+                        Open = "CW",
+                        Partial = "W",
+                        Total = "-CW")
+
+Tickmonth$plot <- factor(Tickmonth$plot,
+                         levels = c("CW", "W", "-CW"))
+
+FigS2 <- ggplot(Tickmonth, aes(x = site, y = log(total +1), fill = plot))+
+  facet_wrap(~ month, ncol = 6)+
+  geom_boxplot()+
+  theme_bw() +
+  scale_x_discrete(labels = c("A", "I", "M")) +
+  theme(legend.position =  'bottom',
+    text = element_text(family = "Times New Roman"), 
+    axis.text.x = element_text(size = 10),           
+    axis.text.y = element_text(size = 10),          
+    axis.title.x = element_text(size = 12),          
+    axis.title.y = element_text(size = 12),         
+    plot.title = element_text(size = 12))+
+  labs(x = 'Climate Level', y = 'Natural Log of Relative Tick Abundance (2017 - 2019)', fill = "Herbivore Treatment")+
+  scale_fill_manual(values=c('darkseagreen1','darkseagreen3','darkseagreen4'))
+
+FigS2
+
+#ggsave("FigS2.png", FigS2, width = 7, dpi = 600)
+```
+
+**Fig S3 (a & b): Lizard population estimates by climate level and herbivore treatment**
+
+```{r}
+## read in data
+pop <- read_csv("Tejon_MixedModels_Dataset.csv")
+
+pop1 <- pop %>%
+  filter(year != "2016")
+
+pop1$site <- as.factor(pop1$site)
+pop1$plot <- as.factor(pop1$plot)
+```
+
+```{r}
+#remove NAs
+pop1liz <- pop1 %>%
+  filter(year != "2019") #remove 2019
+
+pop1liz <- pop1liz[!is.na(pop1liz$liz_estimate), ]
+
+pop1liz$liz_estimate <- as.numeric(pop1liz$liz_estimate)
+
+summary(pop1liz$liz_estimate)
+
+```
+
+```{r}
+FigS3a <- ggplot(pop1liz, aes(x = site, y = liz_estimate, fill = site))+
+  geom_boxplot()+
+  geom_point(alpha = .15)+
+  #geom_signif(comparisons = list(c("Arid", "Intermediate")),
+  #map_signif_level=TRUE)+
+  theme_bw() +
+    theme(legend.position =  "none",
+    text = element_text(family = "Times New Roman"), 
+    axis.text.x = element_text(size = 10),           
+    axis.text.y = element_text(size = 10),          
+    axis.title.x = element_text(size = 12),          
+    axis.title.y = element_text(size = 12),         
+    plot.title = element_blank())+
+  scale_fill_manual(values=c('brown1','tan1','lightgoldenrod1'))+
+  labs(x = "Climate Level", y = "Lizard Population Estimates")+
+  annotate("text", x = -Inf, y = Inf, label = "a.", hjust = -0.8, vjust = 1.5, size = 4, family = "Times New Roman")
+
+FigS3b <- ggplot(pop1liz, aes(x = plot, y = liz_estimate, fill = plot))+
+  geom_boxplot()+
+  geom_point(alpha = .15)+
+  #geom_signif(comparisons = list(c("Partial", "Total")),
+  #map_signif_level=TRUE)+
+  theme_bw() +
+  scale_x_discrete(labels = c("CW", "W", "-CW")) +
+  theme(legend.position =  "none",
+    text = element_text(family = "Times New Roman"), 
+    axis.text.x = element_text(size = 10),           
+    axis.text.y = element_text(size = 10),          
+    axis.title.x = element_text(size = 12),          
+    axis.title.y = element_text(size = 12),         
+    plot.title = element_blank())+
+  labs(x = "Herbivore Treatment", y = NULL)+
+  scale_fill_manual(values=c('darkseagreen1','darkseagreen3','darkseagreen4'))+
+  annotate("text", x = -Inf, y = Inf, label = "b.", hjust = -0.8, vjust = 1.5, size = 4, family = "Times New Roman")
+
+```
+combine plots
+```{r}
+# Combine the two plots side by side
+combined_plot <- FigS3a + FigS3b + plot_layout(ncol = 2)
+
+# Display the combined plot
+combined_plot
+
+#ggsave("FigS3a_b.png", combined_plot, width = 7, dpi = 600)
+```
+
+### Figure S4 ###
+
+**Figure S4 (a & b): Small Mammal Population Estimates by climate level and herbivore treatment**
+
+```{r}
+#remove NAs
+pop1mam <- pop1 %>%
+  filter(year != "2019") #removed 2019
+
+pop1mam <- pop1mam[!is.na(pop1mam$mam_estimates), ]
+
+pop1mam$mam_estimates <- as.numeric(pop1mam$mam_estimates)
+```
+
+```{r}
+FigS4a <- ggplot(pop1mam, aes(x = site, y = mam_estimates, fill = site))+
+  geom_boxplot()+
+  geom_point(alpha = .15)+
+  #geom_signif(comparisons = list(c("Arid", "Intermediate"), c("Intermediate", "Mesic"), c("Arid", "Mesic")),
+  #map_signif_level=TRUE)+
+  theme_bw() +
+    theme(legend.position =  "none",
+    text = element_text(family = "Times New Roman"), 
+    axis.text.x = element_text(size = 10),           
+    axis.text.y = element_text(size = 10),          
+    axis.title.x = element_text(size = 12),          
+    axis.title.y = element_text(size = 12),         
+    plot.title = element_blank())+
+  scale_fill_manual(values=c('brown1','tan1','lightgoldenrod1'))+
+  labs(x = "Climate Level", y = "Mammal Population Estimates")+
+  annotate("text", x = -Inf, y = Inf, label = "a.", hjust = -0.8, vjust = 1.5, size = 4, family = "Times New Roman")
+
+
+FigS4b <- ggplot(pop1mam, aes(x = plot, y = mam_estimates, fill = plot))+
+  geom_boxplot()+
+  geom_point(alpha = .15)+
+  #geom_signif(comparisons = list(c("Open", "Partial"), c("Partial", "Total"), c("Open", "Total")),
+  #map_signif_level=TRUE)+
+  theme_bw() +
+  scale_x_discrete(labels = c("CW", "W", "-CW")) +
+    theme(legend.position =  "none",
+    text = element_text(family = "Times New Roman"), 
+    axis.text.x = element_text(size = 10),           
+    axis.text.y = element_text(size = 10),          
+    axis.title.x = element_text(size = 12),          
+    axis.title.y = element_text(size = 12),         
+    plot.title = element_blank())+
+  scale_fill_manual(values=c('darkseagreen1', 'darkseagreen3', 'darkseagreen4'))+
+  labs(x = "Herbivore Treatment", y = NULL)+
+  annotate("text", x = -Inf, y = Inf, label = "b.", hjust = -0.8, vjust = 1.5, size = 4, family = "Times New Roman")
+
+```
+combine plots
+```{r}
+# Combine the two plots side by side
+combined_plot <- FigS4a + FigS4b + plot_layout(ncol = 2)
+
+# Display the combined plot
+combined_plot
+
+#ggsave("FigS4a_b.png", combined_plot, width = 7, dpi = 600)
+```

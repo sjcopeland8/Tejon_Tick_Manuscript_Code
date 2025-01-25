@@ -1,0 +1,511 @@
+---
+title: "Data Analysis Script for Main Text"
+author: "Stephanie Copeland & Samantha Sambado"
+date: "2024-08-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## upload neccessary packages
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(plyr)
+library(knitr)
+library(lme4)
+library(jtools)
+library(MuMIn)
+library(rstatix)
+
+#install.packages("glmmTMB", type="source")
+library(glmmTMB)
+#install.packages("pscl")
+library(pscl)
+#install.packages("GGally")
+library(GGally)
+
+library(here)
+```
+
+```{r}
+## upload data
+tick <- read_csv("Tejon_MeanComparisons_Dataset.csv")
+
+#plot = herbivore exclosure treatment
+# Partial = wildlife only (W)
+# Open = wildlife & cattle (CW)
+# Total = minus wildlife & cattle (-CW)
+
+#site = climate level 
+# Arid
+# Intermediate 
+# Mesic
+
+## working dataframe
+Tick <- tick
+```
+
+```{r}
+### format data
+Tick$deoc <- as.integer(Tick$deoc)
+Tick$site <- as.factor(Tick$site)
+Tick$plot <- as.factor(Tick$plot)
+Tick$year <- as.factor(Tick$year)
+Tick$month <- as.factor(Tick$month)
+
+## change any plots in 2016 to 'Open', fencing was established in November of 2016
+Tick <- Tick %>%
+  mutate(plot = if_else(year == "2016", "Open", plot))
+
+# remove pre-treatment 2016 data for some of the stats
+# summary analyses includes all tick species collected in drags
+# effect and regression analyses include only D. occidentalis counts from 2017 onward
+Tick1 <- Tick %>%
+  filter(year != "2016")
+dim(Tick1)
+
+Tick1$deoc <- as.integer(Tick1$deoc)
+Tick1$site <- as.factor(Tick1$site)
+Tick1$plot <- as.factor(Tick1$plot)
+Tick1$year <- as.factor(Tick1$year)
+Tick1$month <- as.factor(Tick1$month)
+```
+
+**Methods**
+
+Most statistical analyses focused on questing tick counts collected approximately monthly from 2017 through 2019, encompassing the three-year period post-exclosure construction. Since the abundance of I. pacificus and D. variabilis were low, tick totals of all species (I. pacificus, D. occidentalis, D. variabilis) were combined in the summary analysis, but only D. occidentalis, the species found in the highest abundance within our study were used for the effect and regression analysesis. Despite extensive efforts to collect the juvenile life stages of all tick species, we had limited success, and therefore, only the adult life stages were included in the analysis. Count data for the drag-sampled adult ticks was was non-normal and therefore necessitated the use of nonparametric tests and log transformation to a negative binomial distribution for model analyses. All analyses were performed in RStudio (v 4.4.1).
+
+### summary statistics for study ###
+
+#### how many times did we sample each plot per month? ####
+```{r}
+#month_levels <- c("January", "February", "March", "April", "May", "June", 
+                  #"July", "August", "September", "October", "November", "December")
+
+#Tick2 <- Tick1 %>%
+  #mutate(month = factor(month, levels = month_levels))
+
+#site_visits <- Tick2 %>%
+  #group_by(year, month, plotID) %>%
+  #dplyr::summarise(count = n(), .groups = 'drop')
+
+#site_visits
+
+#plotID_info <- Tick1 %>%
+  #select(plotID, site, block, plot) %>%
+  #distinct() %>% 
+  #arrange(plotID)
+
+#plotID_info
+```
+
+In 2017 all plots were sampled 1 time per month. In April that year all plots were sampled and additional 2 times, in May of that year they were sampled 1 additional time. This sampling effort also occurred in 2018. In 2019 all plots were sampled one additional time in April. In May, the plots at the climate levels Intermediate and Mesic were sampled and additional time, but the plots at the Arid climate were only sampled once. Additionally, all plots were sampled an additional time in June.
+
+#### raw summaries ####
+```{r}
+Tick %>%
+  tally(total) #2692 total ticks
+
+Tick %>%
+   tally(deoc) #2420 D. occidentalis
+
+Tick %>%
+   tally(ipac) #206 I. pacificus
+
+Tick %>%
+   tally(deva) #68 D. variablilis
+```
+
+#### mean questing ticks ####
+```{r}
+#mean by year
+Tick %>%
+  group_by(year) %>%
+  dplyr::summarise(Mean = mean(total, na.rm = TRUE),
+                   SD = sd(total, na.rm = TRUE))
+#2016 M = 0.22, SD = 0.52
+#2017 M = 2.77, SD = 5.29
+#2018 M = 1.93, SD = 3.54
+#2019 M = 2.14, SD = 6.35
+
+#mean by herbivore treatment
+Tick1 %>%
+  group_by(plot) %>%
+  dplyr::summarise(Mean = mean(total, na.rm = TRUE),
+            SD = sd(total, na.rm = TRUE))
+#Open M = 1.22, SD = 3.20
+#Partial M = 2.49, SD = 5.10
+#Total M = 3.16, SD = 6.40
+
+#mean by climate level
+Tick %>%
+  group_by(site) %>%
+  dplyr::summarise(Mean = mean(total, na.rm = TRUE),
+            SD = sd(total, na.rm = TRUE))
+#Arid M = 0.756, SD = 2.77
+#Inter M = 3.70, SD = 6.99
+#Mesic M = 1.26, SD = 2.18
+
+#mean by month
+Tick %>%
+  group_by(month) %>%
+  dplyr::summarise(Mean = mean(total, na.rm = TRUE),
+            SD = sd(total, na.rm = TRUE))
+```
+
+### effects of herbivore grazing and climate aridity treatments on D. occidentalis counts ###
+#### significance of herbivory treatment ####
+```{r}
+Tick1 %>% 
+  kruskal.test(deoc ~ plot)
+#sig difference by plot
+# chi-squared = 7990.3, df = 10, p-value < 2.2e-16
+
+Tick1 %>%
+  dunn_test(deoc ~ plot, p.adjust.method = "bonferroni")
+# CW and W sig different p-adj = 2.127328e-05
+# CW and -CW sig different p-adj = 1.951689e-07
+# W and -CW not sig different p = 3.610428e-01
+
+## effect size of herbivory treatment
+Tick1  %>%
+  kruskal_effsize(deoc ~ plot)
+#H-stat = 0.02616204, magnitude = 'small'
+```
+
+#### significance of climate level ####
+```{r}
+Tick1 %>% 
+  kruskal.test(deoc ~ site)
+#sig difference by site
+# chi-squared = 7990.3, df = 10, p-value < 2.2e-16
+
+Tick1 %>%
+  dunn_test(deoc ~ site, p.adjust.method = "bonferroni")
+# Arid and Inter sig different from each other p-adj = 6.722584e-20
+# Arid and Mesic sig different from each other p-adj = 2.653797e-05
+# Inter and Mesic sig different from each other p-adj = 3.888322e-06	
+
+## effect size of climate level
+Tick1  %>%
+  kruskal_effsize(deoc ~ site)
+#H-stat = 0.06957917, magnitude = 'moderate'
+```
+
+**Methods**
+
+*Tick density relationships with herbivores and climate:*
+
+*Effect size:*
+
+To measure the strength of the relationship between herbivore treatmentexclusion and climatic aridity levels on D. occidentalis counts, we calculated the effect size using a non-parametric Kruskal-Wallis test followed by a post-hoc Dunn’s test with a Bonferroni correction. 
+
+**Results**
+
+ *D. occidentalis counts were significantly different between herbivore exclosure treatment and climatic level:*
+ 
+ D. occidentalis count was significantly different between the herbivory treatments (p < 0.001) and climate levels (p < 0.001). For herbivory exclosures, D. occidentalis counts weresignificantly different when comparing CW exclosures with W exclosures (p < 0.001) or with -CW exclosures (p < 0.001). There were no significant differences in D. occidentalis counts between the W and -CW exclosures (p = 0 .36) (Figure 3a). D. occidentalis counts were significantly different between all three climate levels with the counts between Intermediate and Arid being the most significantly different (p < 0.001), followed by Intermediate and Mesic (p < 0.001), and lastly, Arid and Mesic (p < 0.001). The effect of climatic level based on the Kruskal Effect Size was moderate (H-statistic = 0.060) on D. occidentalis counts. It was greater than the effect of herbivory treatment on D. occidentalis counts, which was small (H-statistic = 0.012).
+ 
+### model analyses for interactive effect of exclosure treatment and climate level ###
+#### fixed effects: herbivory treatment & climate level ####
+
+```{r}
+# set intercept to Intermediate at Wildlife Only plots
+Tick1$site = relevel(Tick1$site, ref = "Intermediate")
+Tick1$plot = relevel(Tick1$plot, ref = "Partial")
+
+mod_1_1 <- glmmTMB(deoc ~ 1 + (1|month) + (1|plotID),
+                  family = nbinom2(), 
+                  data = Tick1)
+
+mod_1_2 <- glmmTMB(deoc ~ site + plot + (1|month) + (1|plotID),
+                  family = nbinom2(), 
+                  data = Tick1)
+
+mod_1_3 <- glmmTMB(deoc ~ site*plot + (1|month) + (1|plotID),
+                  family = nbinom2(), 
+                  data = Tick1)
+
+AIC(mod_1_1, mod_1_2, mod_1_3)
+#mod_1_1	4	  3153.982		
+#mod_1_2	8	  3132.582		
+#mod_1_3	12	3131.534
+anova(mod_1_2, mod_1_3)#p = 0.05992, mod_1_3 w/ the interactive term just slightly better
+summary(mod_1_3)
+```
+
+#### fixed effects: herbivory treatment, climate level & year ####
+```{r}
+# set intercept to Intermediate at Wildlife Only plots
+Tick1$site = relevel(Tick1$site, ref = "Intermediate")
+Tick1$plot = relevel(Tick1$plot, ref = "Partial")
+
+mod_2_1 <- glmmTMB(deoc ~ 1 + year + (1|month) + (1|plotID),
+                  family = nbinom2(), 
+                  data = Tick1)
+
+mod_2_2 <- glmmTMB(deoc ~ plot*year + site + (1|month) + (1|plotID),
+                  family = nbinom2(), 
+                  data = Tick1)
+
+mod_2_3 <- glmmTMB(deoc ~ plot*site + year + (1|month) + (1|plotID),
+                  family = nbinom2(), 
+                  data = Tick1)
+
+mod_2_4 <- glmmTMB(deoc ~ plot*site*year + (1|month) + (1|plotID),
+                  family = nbinom2(), 
+                  data = Tick1)
+
+AIC(mod_2_1, mod_2_2, mod_2_3, mod_2_4)
+# mod_2_1	6	  3140.197		
+# mod_2_2	14	3107.427		
+# mod_2_3	14	3118.701		
+# mod_2_4	30	3088.446	
+anova(mod_2_3, mod_2_4)#mod_2_4 is sig different from mod_2_3 p = 2.173e-07
+
+summary(mod_2_4)
+
+r.squaredGLMM(mod_2_4) #marginal = 0.15, conditional. = 0.90
+
+#pseudo r-squared
+pR2(mod_2_4)
+# McFadden's R-squared = 0.22
+```
+
+#### residual diagnostics of mod_2_4 ####
+```{r}
+# Residuals vs Fitted
+plot(residuals(mod_2_4, type = "pearson"), fitted(mod_2_4), 
+     xlab = "Fitted values", ylab = "Pearson residuals")
+abline(h = 0, col = "red")
+
+#residuals plot
+mod_res <- residuals(mod_2_4)
+plot(mod_res, main="Residuals Plot", ylab="Residuals")
+abline(h=0, col="red")
+```
+
+```{r}
+# QQ plot
+qqnorm(residuals(mod_2_4, type = "pearson"))
+qqline(residuals(mod_2_4, type = "pearson"), col = "red")
+```
+
+```{r}
+# Dispersion test
+overdisp_fun <- function(model) {
+  rdf <- df.residual(model)
+  rp <- residuals(model, type = "pearson")
+  Pearson.chisq <- sum(rp^2)
+  prat <- Pearson.chisq / rdf
+  pval <- pchisq(Pearson.chisq, df = rdf, lower.tail = FALSE)
+  c(chisq = Pearson.chisq, ratio = prat, rdf = rdf, p = pval)
+}
+
+overdisp_fun(mod_2_4)
+
+#       chisq        ratio          rdf            p 
+# 1159.3407311    1.0332805 1122.0000000    0.2136792 
+
+
+# no over dispersion
+```
+
+#### predicted vs. observed ####
+```{r}
+Tick1_2 <- na.omit(Tick1)
+
+# Make predictions
+Tick1_2$predicted <- predict(mod_2_4, type = "response")
+
+# Get predictions and standard errors
+predictions <- predict(mod_2_4, type = "response", se.fit = TRUE)
+Tick1_2$predicted <- predictions$fit
+Tick1_2$se <- predictions$se.fit
+
+# Calculate confidence intervals (e.g., 95%)
+z <- qnorm(0.975)  # 95% confidence interval
+Tick1_2$lower <- Tick1_2$predicted - z * Tick1_2$se
+Tick1_2$upper <- Tick1_2$predicted + z * Tick1_2$se
+
+# Plot
+ggplot(Tick1_2, aes(x = deoc, y = predicted)) +
+  geom_point(aes(color = plot), alpha = 0.5) +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, fill = "blue") +
+  labs(title = "Observed vs. Predicted Values with Confidence Intervals",
+       x = "Observed Deoc Counts",
+       y = "Predicted") +
+  theme_minimal()
+```
+
+#### random effects of mod_2_4 ####
+```{r}
+library(sjPlot)
+plot_model(mod_2_4, type = "re")
+```
+
+#### k-fold cross-validation ####
+```{r}
+#mod_2_4
+
+#install.packages("caret")
+library(caret)
+
+#creating folds
+set.seed(123)
+folds <- createFolds(Tick1_2$deoc, k = 15, returnTrain = TRUE)
+
+#vector to store results
+cv_results_2_4 <- data.frame(Fold = integer(), LogLik = numeric(), AIC = numeric())
+
+for (i in 1:10) {
+  # Split data into training and validation sets
+  train_data_2_4 <- Tick1_2[folds[[i]], ]
+  test_data_2_4 <- Tick1_2[-folds[[i]], ]
+  
+    # Fit the model on the training set
+  model <- glmmTMB(deoc ~ plot*site*year + (1|month) + (1|plotID),
+                  family = nbinom2(), 
+                  data = train_data_2_4)
+  
+    # Evaluate the model on the validation set
+  logLik_val_2_4 <- logLik(model)
+  aic_val_2_4 <- AIC(model)
+  
+    # Store results
+  cv_results_2_4 <- rbind(cv_results_2_4, data.frame(Fold = i, LogLik = logLik_val_2_4, AIC = aic_val_2_4))
+}
+
+# Calculate average LogLik and AIC across all folds
+mean_logLik_2_4 <- mean(cv_results_2_4$LogLik)
+mean_aic_2_4 <- mean(cv_results_2_4$AIC)
+
+print(cv_results_2_4)  # View results for each fold
+print(mean_logLik_2_4)  # Average log-likelihood
+print(mean_aic_2_4)  # Average AIC
+
+
+```
+
+#### visualizing k-folds ####
+```{r}
+cv_results_long <- reshape2::melt(cv_results_2_4, id.vars = "Fold", 
+                                   variable.name = "Metric", value.name = "Value")
+
+# Plot AIC and Log-Likelihood
+ggplot(cv_results_long, aes(x = Fold, y = Value, color = Metric)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Cross-Validation Results",
+       x = "Fold",
+       y = "Value",
+       color = "Metric") +
+  theme_minimal()
+
+```
+
+#### visualizing model and data ####
+```{r}
+# Aggregate data to plot means
+library(dplyr)
+
+Tick1_3 <- na.omit(Tick1)
+# Make predictions
+Tick1_3$predicted <- predict(mod_2_4, type = "response")
+# Get predictions and standard errors
+predictions <- predict(mod_2_4, type = "response", se.fit = TRUE)
+Tick1_3$predicted <- predictions$fit
+Tick1_3$se <- predictions$se.fit
+
+### format data
+Tick1_3$deoc <- as.integer(Tick1_3$deoc)
+Tick1_3$site <- as.factor(Tick1_3$site)
+Tick1_3$plot <- as.factor(Tick1_3$plot)
+Tick1_3$year <- as.factor(Tick1_3$year)
+Tick1_3$month <- as.factor(Tick1_3$month)
+
+agg_data_2 <- Tick1_3 %>%
+  dplyr::group_by(plot, site, year) %>%
+  dplyr::summarize(mean_observed = mean(deoc, na.rm = TRUE),
+            mean_predicted = mean(predicted, na.rm = TRUE),
+            .groups = 'drop')
+
+# Plot actual vs predicted means for plot
+ggplot(agg_data_2, aes(x = mean_observed, y = mean_predicted, color = plot)) +
+  geom_point(size = 3) +
+  geom_smooth(method = "lm", formula = y ~ x, se = TRUE, color = "grey", size = 0.5) +
+  labs(title = "Mean Observed vs. Mean Predicted Values",
+       x = "Mean Observed Values",
+       y = "Mean Predicted Values") +
+  theme_minimal()
+
+#plot actual vs. predicted means for site
+ggplot(agg_data_2, aes(x = mean_observed, y = mean_predicted, color = site)) +
+  geom_point(size = 3) +
+  geom_smooth(method = "lm", formula = y ~ x, se = TRUE, color = "grey", size = 0.5) +
+  labs(title = "Mean Observed vs. Mean Predicted Values",
+       x = "Mean Observed Values",
+       y = "Mean Predicted Values") +
+  theme_minimal()
+
+#plot actual vs. predicted means for year
+ggplot(agg_data_2, aes(x = mean_observed, y = mean_predicted, color = year)) +
+  geom_point(size = 3) +
+  geom_smooth(method = "lm", formula = y ~ x, se = TRUE, color = "grey", size = 0.5) +
+  labs(title = "Mean Observed vs. Mean Predicted Values",
+       x = "Mean Observed Values",
+       y = "Mean Predicted Values") +
+  theme_minimal()
+
+```
+
+**Methods**
+
+*model construction*
+
+Using adult D. occidentalis counts as the response variable. We fit generalized linear mixed models (GLMMs) with a negative binomial distribution and log-link function. We included fixed effects of herbivore treatment (-CW, W, CW), climate (Arid, Intermediate, Mesic), and then year (2017, 2018, 2019). Year constitutes as a proxy for how many years exclosure fences have been constructed. The model intercept was set to W exclosure treatments at climate level Intermediate and represents mid-level aridity between Mesic (wetter) and Arid (drier). The herbivory exclosure type, W, represents the landscape type before the addition of domestic livestock in the CW treatments and can be compared to total defaunation, the treatment of the -CW exclosures. Our models’ random effects accounted for the non-independence of repeated sampling of plots over time and tick seasonality. Therefore, we included a, unique plot ID to represent each of the 27 plots on an individual basis and month due to the natural seasonal variation of tick populations. All models were constructed using the `glmmTMB` package and glmmTMB() function (NEED CITATION).
+
+*model comparisons and assessments*
+
+We compared candidate models using model AIC values and one-sided likelihood-ratio tests with the anova() function in R. For our best-fit model, we compared marginal and conditional R2 to explore the relative importance of fixed and random effects in accounting for the observed variation in D. occidentalis counts. Finally, we used k-fold cross-validation using the `caret` package and model predicted versus observed values to determine the overall success of model fit of D. occidentalis counts to our fixed effects of herbivory treatment and climate level (CITATION NEEDED).
+
+**Results**
+
+*There was a significant interaction between herbivory exclosure and climate level: *
+
+Our best-fit model included a three-way interactive term between our fixed-effects herbivory treatment, climate level, and year (AIC = 3088.4, df = 30). The fixed effects accounted for a small proportion of the variance (marginal R^2 = 0.15) but including the random effects of month and plotID improved model fit (conditional R^2 = 0.90). Nonetheless, inclusion of fixed effects improved the model fit moreso than the null model without fixed effects (McFadden’s R^2 = 0.22). We found that the interaction between CW plots at Arid as well as the Arid climate level were significantly different than W exclosures at Intermediate (p = 0.2 & p = 0.005, respectively). The CW plots at Arid were expected to have approximately 2 less D. occidentalis adult ticks per 60-minute drag than the W plots at intermidate (estimate = -2.08, SE = +/-0.9). Overall, the Arid climate level was expected to have approximately one less questing D. occidentalis adult tick per 60-minute drag (estimate = -1.4, SE = +/- 0.5). Except in the year 2019 when this trend reversed, then there would be approximately one more D. occidentalis adult questing tick at the Arid climate level than the W exclosures at Intermediate (p < 0.001, estimate = 1.4, SE = +/- 0.4). The only other predicted significant interannual variation also occurred in 2019 where, during this year the CW plots were expected to have less ticks than the intercept (p = 0.05, estimate = -0.7, SE = +/- 0.3) (Table 1). 
+
+Model fit was likely impacted by times when D. occidentalis abundances collected in a drag of an exclosure plot was substantially high, 1.74% of the D. occidentalis abundances from exclosure plots fell three standard deviations above the mean (standardized residuals: u = 0, SD = 1). Yet, a k-fold (k = 15) cross-validation showed relatively stable model performance across folds. Additionally, predicted model means fit well to the observed means of herbivory treatment and climate level, averaging dampened the effect of this variation.
+
+#### Investigating Outliers ####
+- as seen in the residuals graph
+
+```{r}
+#univariate outliers
+boxplot(Tick1$deoc, main="Boxplot for deoc", ylab="deoc")
+
+hist(Tick1$deoc, main="Histogram for deoc", xlab="deoc", breaks = 40)
+```
+
+```{r}
+#multivariate outliers?
+
+mod_res <- glmmTMB(deoc ~ plot*site*year + (1|month) + (1|plotID), family = nbinom2(), data = Tick1)
+
+res <- residuals(mod_res, type = "pearson")
+
+#standardize residuals
+std_res <- scale(res)
+
+# Plot Standardized Residuals: points beyond these lines might be outliers
+plot(std_res, main="Standardized Residuals", ylab="Standardized Residuals")
+abline(h=c(-3, 3), col="red")  
+
+outliers <- which(abs(std_res) > 3)
+Tick1[outliers, ]
+#twenty-one points are outliers - 3+ standard deviations away from the from the mean (0) so they make up 1.74% of my data compared to the normal standard deviation of 0.3%. 
+```

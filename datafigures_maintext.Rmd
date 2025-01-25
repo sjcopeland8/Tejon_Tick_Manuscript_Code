@@ -1,0 +1,227 @@
+---
+title: "Data Figures Script for the Main Text"
+author: "Stephanie Copeland & Samantha Sambado"
+date: "2024-08-20"
+output: html_document
+---
+
+## Publication Figures ##
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## upload neccessary packages
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(plyr)
+library(knitr)
+library(lme4)
+library(jtools)
+library(MuMIn)
+library(rstatix)
+#install.packages("glmmTMB", type="source")
+library(glmmTMB)
+library(pscl)
+#install.packages("ggsignif")
+library(ggsignif)
+#install.packages("ggpubr")
+library(ggpubr)
+
+## upload data
+tick <- read_csv("~/Desktop/Tejon_clean/data_analyses/Tejon_MeanComparisons_Dataset.csv")
+dim(tick) # 1449   11
+
+#plot = herbivore exclosure treatment
+# Partial = wildlife only (W)
+# Open = wildlife & cattle (CW)
+# Total = minus wildlife & cattle (-CW)
+
+#site = climate level 
+# Arid
+# Intermediate 
+# Mesic
+
+## working dataframe
+Tick <- tick
+
+### format data
+Tick$deoc <- as.integer(Tick$deoc)
+Tick$site <- as.factor(Tick$site)
+Tick$plot <- as.factor(Tick$plot)
+Tick$year <- as.factor(Tick$year)
+Tick$month <- as.factor(Tick$month)
+
+## change any plots in 2016 to 'Open', fencing was established in November of 2016
+Tick <- Tick %>%
+  mutate(plot = if_else(year == "2016", "Open", plot))
+
+# remove pre-treatment 2016 data for some of the stats
+# summary analyses includes all tick species collected in drags
+# effect and regression analyses include only D. occidentalis counts from 2017 onward
+Tick1 <- Tick %>%
+  filter(year != "2016")
+dim(Tick1)
+
+Tick1$deoc <- as.integer(Tick1$deoc)
+Tick1$site <- as.factor(Tick1$site)
+Tick1$plot <- as.factor(Tick1$plot)
+Tick1$year <- as.factor(Tick1$year)
+Tick1$month <- as.factor(Tick1$month)
+
+```
+
+### Figure 1 ###
+
+**Figure 1a**
+
+TREE is located at the southern-most point of the Sierra Mountain range in California. This provides TREE with the topographical heterogeneity to establish three climate levels, Arid, Intermediate, and Mesic. The Arid climate level occurs in the foothills at approximately 580m in elevation. The Intermediate and Mesic climate levels both occur at approximately 1650m in elevation but are located on opposite-facing hillside slopes. Intermediate is southern facing whilst Mesic is northern facing. Each climate level contains three replicate treatments of the herbivory treatments, there are nine plots at each climate level with twenty-seven total plots. 
+
+
+**Figure 1b**
+
+ The herbivory treatments are CW (cattle and wildlife), W (wildlife only), and -CW (minus cattle and wildlife). The CW plots have no fencing and allow open access to the plots by both wild herbivores and domestic cattle. The W plots are surround by semi-permeable fencing that allow only wild herbivores access to the plot, but prevent cattle from entering. The -CW plots are functionally exclude large wild herbivore (> 4kg) and cattle, so no large herbivores can enter the plot. 
+ 
+
+### Figure 2 ###
+
+**Figure 2a&b**
+
+There was a significant difference by herbivory treatment in *D. occidentalis* between CW and W plots as well as the CW and -CW plots. *D. occidentalis* abundance between W and -CW herbivory exclosures was not significantly different. *D. occidentalis* abundance also varied significantly between all three climate levels, Arid, Intermediate, and Mesic. 
+
+**Figre 2a**
+```{r}
+# omit 0s to make plots look nicer, but this may not be kosher
+Tick_no0 <- Tick1[which(Tick1$deoc != 0),]
+
+Fig2a <- ggplot(Tick_no0, aes(x = plot, y = log(deoc + 1), fill = plot))+
+  geom_boxplot()+
+  geom_point(alpha = .15)+
+    #geom_signif(comparisons = list(c("Open", "Partial"), c("Partial", "Total"), c("Open", "Total")),
+              #map_signif_level=TRUE)+
+  annotate("text", x = -Inf, y = Inf, label = "a.", hjust = -0.8, vjust = 1.5, size = 4, family = "Times New Roman") +
+  theme_bw()+
+  scale_fill_manual(values=c('darkseagreen1','darkseagreen3','darkseagreen4'), guide = "none") + 
+  scale_x_discrete(labels = c("CW", "W", "-CW")) + 
+  labs(
+  x = "Herbivore Treatment", 
+  y = expression("Natural Log of " * italic("D. occidentalis") * "/hour"), 
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = "Times New Roman"), 
+    axis.text.x = element_text(size = 10),           
+    axis.text.y = element_text(size = 10),          
+    axis.title.x = element_text(size = 12),          
+    axis.title.y = element_text(size = 12),          
+    plot.title = element_text(size = 12)                     
+  )
+
+```
+
+**Figure 2b**
+```{r}
+Fig2b <- ggplot(Tick_no0, aes(x = site, y = log(deoc + 1), fill = site))+
+  geom_boxplot()+
+  geom_point(alpha = .15)+
+    #geom_signif(comparisons = list(c("Arid", "Intermediate"), c("Intermediate", "Mesic"), c("Arid", "Mesic")),
+              #map_signif_level=TRUE)+
+  annotate("text", x = -Inf, y = Inf, label = "b.", hjust = -0.8, vjust = 1.5, size = 4, family = "Times New Roman") +
+  theme_bw()+
+  scale_fill_manual(values=c('brown1','tan1','lightgoldenrod1'), guide = "none") + 
+  labs(
+    x = "Climate Level",
+    y = NULL  # No y-axis label
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = "Times New Roman"), 
+    axis.text.x = element_text(size = 10),           
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 12),      
+    plot.title = element_text(size = 12),                  
+    axis.title.y = element_text(size = 12)
+  )
+
+```
+combine figures
+```{r}
+#install.packages("patchwork")
+
+library(patchwork)
+
+# Combine the two plots side by side
+combined_plot <- Fig2a + Fig2b + plot_layout(ncol = 2)
+
+# Display the combined plot
+combined_plot
+
+#ggsave("Fig2a_b.png", combined_plot, width = 7, dpi = 600)
+```
+
+
+### Table 1 ###
+
+*D. occidentalis* abundance ~ herbivory treatment * climate level * year + (1|Month) + (1|PlotID)
+
+```{r}
+Tick1$site = relevel(Tick1$site, ref = "Intermediate")
+Tick1$plot = relevel(Tick1$plot, ref = "Partial")
+
+mod_2_4 <- glmmTMB(deoc ~ plot*site*year + (1|month) + (1|plotID),
+                  family = nbinom2(), 
+                  data = Tick1)
+
+summary(mod_2_4)
+
+## create a word doc table with just the significant results, then input here ##
+# a full model table will be put in the appendix #
+```
+
+### Figure 3 ###
+
+```{r}
+
+cleaned_data <- Tick1 %>%
+  na.omit() %>%
+  group_by(year, site, plot) %>%
+  dplyr::summarise(
+    mean_deoc = mean(deoc, na.rm = TRUE),
+    se_deoc = sd(deoc, na.rm = TRUE) / sqrt(n())
+  ) %>%
+  ungroup() %>% 
+  mutate(
+    plot = factor(plot, levels = c("Open", "Partial", "Total")),
+    site = factor(site, levels = c("Arid", "Intermediate", "Mesic")),
+    year = factor(year, levels = c("2016", "2017", "2018", "2019")))
+
+Fig3 <- ggplot(cleaned_data, aes(x = site, y = mean_deoc, fill = plot))+
+  facet_wrap(~year)+
+  geom_bar(stat = "identity", position = "dodge")+
+  geom_errorbar(aes(ymin = mean_deoc - se_deoc, ymax = mean_deoc + se_deoc),
+                position = position_dodge(width = 0.9),
+                width = 0.1) +
+  theme_bw() +
+  scale_x_discrete(labels = c("A", "I", "M")) +
+  theme(legend.position =  'bottom',
+    text = element_text(family = "Times New Roman"), 
+    axis.text.x = element_text(size = 10),           
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 12),      
+    plot.title = element_text(size = 12),                  
+    axis.title.y = element_text(size = 12))+
+  scale_fill_manual(values=c('darkseagreen1','darkseagreen3','darkseagreen4'),
+                    labels = c('CW', 'W', '-CW'),
+                    name = 'Herbivore Treatment') +
+  labs(x = "Climate Level",
+       y = expression(paste("Mean ", italic("D. occidentalis"), " Abundance")))
+
+Fig3
+
+#ggsave("~Fig3.png", Fig3, width = 7, dpi = 600)
+
+
+```
+
+

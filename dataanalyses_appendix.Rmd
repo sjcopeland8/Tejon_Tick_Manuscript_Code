@@ -1,0 +1,207 @@
+---
+title: "Data Analysis Script for Appendix"
+author: "Stephanie Copeland & Samantha Sambado"
+date: "2024-08-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## upload neccessary packages
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(plyr)
+library(knitr)
+library(lme4)
+library(jtools)
+library(MuMIn)
+library(rstatix)
+
+#install.packages("glmmTMB", type="source")
+library(glmmTMB)
+#install.packages("pscl")
+library(pscl)
+#install.packages("GGally")
+library(GGally)
+```
+
+## Appendix S1 ##
+
+### Investigating possible mechanisms beyond the treatment effects. ###
+
+```{r}
+pop <- read_csv("Tejon_MixedModels_Dataset.csv")
+
+# change data structure for analyses
+pop$site <- as.factor(pop$site)
+pop$plot <- as.factor(pop$plot)
+
+pop1 <- pop %>%
+  filter(year != "2016")
+
+```
+
+**How do environmental stressors impact population estimates of lizards and mammals, two important vertebrates in the tick system?**
+```{r}
+### Compare means of population estimates ###
+
+## Lizards ##
+# Remove NA values from liz_estimates
+
+pop1_liz <- pop1 %>% 
+  filter(year != "2019") # mark-recapture not done in 2019, but instead was a capture to sample attached ticks effort
+
+pop1_liz <- pop1_liz[!is.na(pop1_liz$liz_estimate), ]
+
+pop1_liz$liz_estimate <- as.numeric(pop1_liz$liz_estimate)
+
+
+
+# lizards were only sampled at two sites, so will use a two sample t-test if normal
+## Sampled at the Arid and Intermediate Climate Levels, not Mesic
+
+# check normality
+qqnorm(pop1_liz$liz_estimate, main = "Q-Q Plot of liz_estimate")
+qqline(pop1_liz$liz_estimate, col = "red") # does not look normal
+shapiro.test(pop1_liz$liz_estimate) # p < 0.05, so data are not normal
+
+# check variance
+levene_test(liz_estimate ~ site, data = pop1_liz) #  p < 2.2e-16, F = 251.7; variances are different
+
+# non-parametric Mann-Whitney U is testing the shape of the two distributions are different
+
+# wilcox rank sum test with continuity correction (non-equal variances)
+wilcox.test(liz_estimate ~ site, data = pop1_liz) #W = 9900, p-value  < 2.2e-16
+
+# p < 2.2e-16, reject H0 that means are equal to 0
+
+## lizard population estimates are different at Intermediate and Arid sites
+```
+
+```{r}
+## Mammals ##
+# Remove NA values from mam_estimates
+
+pop1_mam <- pop1 %>%
+  filter(year != "2019") #sampling only took place at two exclosure sets, one at the Arid & one at the Mesic climate levels
+
+pop1_mam <- pop1_mam[!is.na(pop1_mam$mam_estimates), ]
+
+pop1_mam$mam_estimates <- as.numeric(pop1_mam$mam_estimates)
+
+summary(pop1_mam$mam_estimates)
+
+# check normality
+qqnorm(pop1_mam$mam_estimates, main = "Q-Q Plot of liz_estimate")
+qqline(pop1_mam$mam_estimates, col = "red") # does not look normal
+shapiro.test(pop1_mam$mam_estimates) # p < 2.2e-16, so data are not normal
+
+# check variance
+levene_test(mam_estimates ~ site, data = pop1_mam) # F = 32.7; p-value < 2.2e-16 variances are different 
+
+kruskal.test(mam_estimates ~ site, data = pop1_mam) #chi-squared = 85.6; p-value < 2.2e-16
+
+dunn_test(mam_estimates ~ site, p.adjust.method = "bonferroni", data = pop1_mam)
+## There is a significant difference in mammal population estimates between all three climate levels.
+
+## Group            stat          p.adj
+## Arid - Inter     -6.0          1.5e-08 ***
+## Arid - Mesic     3.9           3.3e-04 ***
+## Inter - Mesic    9.2           7.3e-20 ***
+
+```
+
+**How do herbivore treatments impact population estimates of lizards and mammals?**
+```{r}
+## Lizards ##
+
+#data no normal so non-parametric Kruskal-Wallis test
+
+# check variance
+levene_test(liz_estimate ~ plot, data = pop1_liz) #F = 2.4, p-value = 0.09; variances are not different
+
+# kruskal-wallis text
+kruskal.test(liz_estimate ~ plot, data = pop1_liz) #chi-squared = 11.5, p-value < 0.05
+
+dunn_test(liz_estimate ~ plot, p.adjust.method = "bonferroni", data = pop1_liz)
+## There is a significant difference in lizard population estimates between the W and -CW exclosures.
+
+## Group          stat          p.adj
+## CW & W         -1.2          0.67
+## CW & -CW       2.1           0.09
+## W & -CW        3.4           0.002 **
+```
+
+```{r}
+## Mammals ##
+
+levene_test(mam_estimates ~ plot, data = pop1_mam) #F = 44.0, p-value < 2.2e-16; variances are different
+
+kruskal.test(mam_estimates ~ plot, data = pop1_mam) #chi-squared = 140.19; p-value < 2.2e-16
+
+dunn_test(mam_estimates ~ plot, p.adjust.method = "bonferroni", data = pop1_mam)
+## There is a significant difference in mammal population estimates between the CW and W plot and between the CW and -CW plot. There is no significant difference in mammal population estimates between the W and -CW plot.
+
+## Group            stat              p.adj
+## CW & W           9.3              5.5e-20 ****
+## CW & -CW         11.0             1.2e-27 ****
+## W & -CW          0.98               9.8
+```
+
+**Are vertebrate population estimates correlated with tick counts?**
+
+```{r}
+# organize data
+pop2 <- pop1 %>% 
+  filter(year != "2019")
+
+#drop NAs from the estimate columns
+pop2 <- pop2[which(pop2$mam_estimates != "NA"),]
+pop2 <- pop2[which(pop2$liz_estimate != "NA"),]
+
+unique(pop2$mam_estimates)
+unique(pop2$liz_estimate)
+#it worked
+
+pop2$liz_estimate <- as.numeric(pop2$liz_estimate)
+pop2$mam_estimates <- as.numeric(pop2$mam_estimates)
+
+str(pop2)
+#now the columns are numeric
+
+## Spearman's Rank Correlation ##
+
+# select subset of data to use for test & visualize
+pop2_cor <- subset(pop2, select = c(6,13:14))
+
+# change structure of data for analyses
+pop2_cor$total <- as.numeric(pop2_cor$total)
+
+# visualize data
+ggpairs(pop2_cor, columns = c("total", "liz_estimate"), 
+        upper = list(continuous = "cor"),
+        diag = list(continuous = "barDiag"),
+        lower = list(continuous = "points"))
+
+ggpairs(pop2_cor, columns = c("total", "mam_estimates"), 
+        upper = list(continuous = "cor"),
+        diag = list(continuous = "barDiag"),
+        lower = list(continuous = "points"))
+
+cor.test(pop2_cor$total, pop2_cor$liz_estimate,
+         method = "spearman")
+# p-value = 3.5e-07
+# rho = 0.25
+## There is a statistically significant, weak positive correlation between lizard population estimates and questing tick abundance. As lizard population estimates increase so does questing tick abundance, albeit weakly. 
+
+cor.test(pop2_cor$total,pop2_cor$mam_estimates,
+         method = "spearman")
+# p-value = 0.7
+# rho = -0.02
+## There is no signficant correlation between mammal population estimates and questing tick abundance.
+```
+
+
