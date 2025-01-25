@@ -14,5 +14,5 @@ Stephanie Copeland ^1, Samantha Sambado ^1, Devyn Orr ^2*, An Bui ^1, Andrea Swe
 *corresponding author*: Stephanie Copeland (scopeland@ucsb.edu)
 
 ## Open Research Statement ##
-Raw and clean data files are prodived open source via Dryad (https://doi.org/10.25349/D9M31J). Code for data cleaning, analyses, and figures in the main text and the appendix are provided here. 
+Raw and clean data files are provided open source via Dryad (https://doi.org/10.25349/D9M31J). Code for data cleaning, analyses, and figures in the main text and the appendix are provided here. 
 
